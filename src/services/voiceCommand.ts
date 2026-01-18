@@ -15,13 +15,14 @@ export interface VoiceCommandResponse {
 
 export const processVoiceCommand = async (
   message: string,
-  language: string = "hi"
+  language: string = "hi",
+  balance?: number
 ): Promise<VoiceCommandResponse> => {
   try {
-    console.log("Sending voice command to AI:", message);
+    console.log("Sending voice command to AI:", message, "balance:", balance);
 
     const { data, error } = await supabase.functions.invoke("voice-command", {
-      body: { message, language },
+      body: { message, language, balance },
     });
 
     if (error) {
@@ -56,3 +57,53 @@ export const processVoiceCommand = async (
     };
   }
 };
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

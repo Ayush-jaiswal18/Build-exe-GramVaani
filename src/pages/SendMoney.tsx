@@ -6,10 +6,13 @@ import { VoiceWave } from "@/components/VoiceWave";
 import { ConversationBubble } from "@/components/ConversationBubble";
 import { VoicePinSetup } from "@/components/VoicePinSetup";
 import { VoicePinVerify } from "@/components/VoicePinVerify";
+import { VoiceEnrollment } from "@/components/VoiceEnrollment";
+import { VoiceVerification } from "@/components/VoiceVerification";
 import { useSpeechToText } from "@/hooks/useSpeechToText";
 import { useTextToSpeech } from "@/hooks/useTextToSpeech";
 import { useBanking } from "@/hooks/useBanking";
 import { useVoicePin } from "@/hooks/useVoicePin";
+import { useEagleSpeaker } from "@/hooks/useEagleSpeaker";
 import { toast } from "sonner";
 
 const SendMoney = () => {
@@ -25,23 +28,26 @@ const SendMoney = () => {
   const { speak, isSpeaking, stop: stopSpeaking } = useTextToSpeech();
   const { balance, createTransaction, isCreatingTransaction } = useBanking();
   const { hasPinSet, checkPinStatus } = useVoicePin();
+  const { hasVoiceProfile, checkVoiceProfile } = useEagleSpeaker();
   
-  const [step, setStep] = useState<"recipient" | "amount" | "confirm" | "pin_verify" | "success">("recipient");
+  const [step, setStep] = useState<"recipient" | "amount" | "confirm" | "voice_verify" | "pin_verify" | "success">("recipient");
   const [recipient, setRecipient] = useState("");
   const [recipientPhone, setRecipientPhone] = useState("");
   const [amount, setAmount] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [showPinSetup, setShowPinSetup] = useState(false);
+  const [showVoiceEnrollment, setShowVoiceEnrollment] = useState(false);
   const lastProcessedTranscript = useRef<string>("");
   
   const [conversation, setConversation] = useState([
     { message: "किसे पैसे भेजना है? नाम या फोन नंबर बोलें।", isUser: false, timestamp: "अभी" }
   ]);
 
-  // Check PIN status on mount
+  // Check auth status on mount
   useEffect(() => {
     checkPinStatus();
-  }, [checkPinStatus]);
+    checkVoiceProfile();
+  }, [checkPinStatus, checkVoiceProfile]);
 
   const recentContacts = [
     { name: "राम कुमार", phone: "9876543210", initial: "र" },
@@ -140,7 +146,17 @@ const SendMoney = () => {
           lowerInput.includes("yes") || lowerInput.includes("भेजो") ||
           lowerInput.includes("ok") || lowerInput.includes("ओके")) {
         
-        // Check if PIN is set - require PIN verification
+        // Check for voice biometrics first (preferred for rural/offline)
+        if (hasVoiceProfile) {
+          const response = "🔒 आवाज़ से पहचान करें।";
+          setConversation(prev => [...prev, { message: response, isUser: false, timestamp: "अभी" }]);
+          speak(response);
+          setStep("voice_verify");
+          setIsProcessing(false);
+          return;
+        }
+        
+        // Fall back to PIN verification
         if (hasPinSet) {
           const response = "🔒 सुरक्षा के लिए अपना PIN बोलें।";
           setConversation(prev => [...prev, { message: response, isUser: false, timestamp: "अभी" }]);
@@ -150,7 +166,7 @@ const SendMoney = () => {
           return;
         }
         
-        // If no PIN set, proceed directly (or prompt to set one)
+        // If no auth set, proceed directly (or prompt to set one)
         await executeTransaction();
       } else if (lowerInput.includes("नहीं") || lowerInput.includes("no") || lowerInput.includes("cancel")) {
         const response = "ट्रांसफर रद्द किया गया।";
@@ -165,7 +181,7 @@ const SendMoney = () => {
     }
     
     setIsProcessing(false);
-  }, [step, recipient, amount, speak, hasPinSet]);
+  }, [step, recipient, amount, speak, hasPinSet, hasVoiceProfile]);
 
   // Execute the actual transaction
   const executeTransaction = useCallback(async () => {
@@ -200,19 +216,24 @@ const SendMoney = () => {
     }
   }, [amount, balance, recipient, recipientPhone, createTransaction, speak]);
 
-  // Handle PIN verification success
-  const handlePinVerified = useCallback(() => {
+  // Handle verification success (voice or PIN)
+  const handleVerificationSuccess = useCallback(() => {
     setStep("confirm");
     executeTransaction();
   }, [executeTransaction]);
 
-  // Handle PIN verification cancel
-  const handlePinCancel = useCallback(() => {
+  // Handle verification cancel
+  const handleVerificationCancel = useCallback(() => {
     setStep("confirm");
     const response = "ट्रांसफर रद्द किया गया।";
     setConversation(prev => [...prev, { message: response, isUser: false, timestamp: "अभी" }]);
     speak(response);
   }, [speak]);
+
+  // Handle fallback to PIN from voice verification
+  const handleFallbackToPin = useCallback(() => {
+    setStep("pin_verify");
+  }, []);
 
   // Watch for transcript changes
   useEffect(() => {
@@ -263,11 +284,23 @@ const SendMoney = () => {
     setConversation([{ message: response, isUser: false, timestamp: "अभी" }]);
   };
 
-  const stepIndex = ["recipient", "amount", "confirm", "pin_verify", "success"].indexOf(step);
-  const displayStepIndex = step === "pin_verify" ? 2 : stepIndex; // Show confirm step during PIN verify
+  const stepIndex = ["recipient", "amount", "confirm", "voice_verify", "pin_verify", "success"].indexOf(step);
+  const displayStepIndex = (step === "voice_verify" || step === "pin_verify") ? 2 : stepIndex;
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Voice Enrollment Modal */}
+      {showVoiceEnrollment && (
+        <VoiceEnrollment 
+          onComplete={() => setShowVoiceEnrollment(false)} 
+          onCancel={() => setShowVoiceEnrollment(false)}
+          onFallbackToPin={() => {
+            setShowVoiceEnrollment(false);
+            setShowPinSetup(true);
+          }}
+        />
+      )}
+
       {/* PIN Setup Modal */}
       {showPinSetup && (
         <VoicePinSetup 
@@ -276,15 +309,27 @@ const SendMoney = () => {
         />
       )}
 
+      {/* Voice Verification Modal */}
+      {step === "voice_verify" && (
+        <VoiceVerification 
+          onSuccess={handleVerificationSuccess}
+          onCancel={handleVerificationCancel}
+          onFallbackToPin={handleFallbackToPin}
+          title="Verify Transfer"
+          description={`₹${parseInt(amount).toLocaleString('en-IN')} भेजने के लिए बोलें`}
+        />
+      )}
+
       {/* PIN Verify Modal */}
       {step === "pin_verify" && (
         <VoicePinVerify 
-          onSuccess={handlePinVerified}
-          onCancel={handlePinCancel}
+          onSuccess={handleVerificationSuccess}
+          onCancel={handleVerificationCancel}
           title="Verify Transfer"
           description={`₹${parseInt(amount).toLocaleString('en-IN')} भेजने के लिए PIN बोलें`}
         />
       )}
+
       {/* Header */}
       <header className="sticky top-0 z-30 bg-background/95 backdrop-blur-xl border-b border-border">
         <div className="container mx-auto px-4 py-3 sm:py-4">

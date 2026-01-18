@@ -32,7 +32,7 @@ export const useVoicePin = () => {
       return false;
     }
 
-    const hasPin = !!data?.voice_pin_hash;
+    const hasPin = !!(data as any)?.voice_pin_hash;
     setHasPinSet(hasPin);
     return hasPin;
   }, [user]);
@@ -58,7 +58,7 @@ export const useVoicePin = () => {
         .update({ 
           voice_pin_hash: pinHash,
           voice_pin_set_at: new Date().toISOString()
-        })
+        } as any)
         .eq("user_id", user.id);
 
       if (error) {
@@ -120,13 +120,13 @@ export const useVoicePin = () => {
         .eq("user_id", user.id)
         .maybeSingle();
 
-      if (error || !data?.voice_pin_hash) {
+      if (error || !(data as any)?.voice_pin_hash) {
         return { success: false, error: "No PIN set. Please set up your security PIN first." };
       }
 
       // Compare hashes
       const inputHash = await hashPin(extractedPin);
-      if (inputHash === data.voice_pin_hash) {
+      if (inputHash === (data as any).voice_pin_hash) {
         return { success: true };
       } else {
         return { success: false, error: "Incorrect PIN. Please try again." };

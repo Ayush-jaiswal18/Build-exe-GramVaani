@@ -1,12 +1,18 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Eye, EyeOff, RefreshCw, Wallet, HelpCircle } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, RefreshCw, Wallet, HelpCircle, Loader2 } from "lucide-react";
 import { VoiceButton } from "@/components/VoiceButton";
 import { VoiceWave } from "@/components/VoiceWave";
 import { ConversationBubble } from "@/components/ConversationBubble";
+import { useBanking } from "@/hooks/useBanking";
+import { useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@/hooks/useAuth";
 
 const CheckBalance = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const { balance, accountNumber, isLoading } = useBanking();
+  const queryClient = useQueryClient();
   const [isListening, setIsListening] = useState(false);
   const [showBalance, setShowBalance] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -14,10 +20,9 @@ const CheckBalance = () => {
     { message: "आपका खाता शेष देखने के लिए 'बैलेंस बताओ' बोलें।", isUser: false, timestamp: "अभी" }
   ]);
 
-  const accountData = {
-    savings: { balance: 24580, accountNo: "XXXX1234" },
-    current: { balance: 85000, accountNo: "XXXX5678" },
-  };
+  // Format account number for display (show last 4 digits)
+  const maskedAccountNo = accountNumber ? `XXXX${accountNumber.slice(-4)}` : "XXXX0000";
+  const formattedBalance = balance.toLocaleString('en-IN');
 
   const handleVoiceToggle = () => {
     setIsListening(!isListening);
@@ -30,7 +35,7 @@ const CheckBalance = () => {
         setTimeout(() => {
           setConversation(prev => [
             ...prev,
-            { message: `आपके बचत खाते में ₹${accountData.savings.balance.toLocaleString('en-IN')} और चालू खाते में ₹${accountData.current.balance.toLocaleString('en-IN')} उपलब्ध हैं।`, isUser: false, timestamp: "अभी" }
+            { message: `आपके खाते में ₹${formattedBalance} उपलब्ध हैं।`, isUser: false, timestamp: "अभी" }
           ]);
           setIsListening(false);
         }, 1500);
@@ -38,16 +43,23 @@ const CheckBalance = () => {
     }
   };
 
-  const handleRefresh = () => {
+  const handleRefresh = async () => {
     setIsRefreshing(true);
-    setTimeout(() => {
-      setIsRefreshing(false);
-      setConversation(prev => [
-        ...prev,
-        { message: "आपका बैलेंस अपडेट हो गया है।", isUser: false, timestamp: "अभी" }
-      ]);
-    }, 1500);
+    await queryClient.invalidateQueries({ queryKey: ["account", user?.id] });
+    setIsRefreshing(false);
+    setConversation(prev => [
+      ...prev,
+      { message: "आपका बैलेंस अपडेट हो गया है।", isUser: false, timestamp: "अभी" }
+    ]);
   };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -70,9 +82,8 @@ const CheckBalance = () => {
       </header>
 
       <main className="container mx-auto px-4 py-4 sm:py-6 pb-52 sm:pb-56">
-        {/* Balance Cards */}
+        {/* Balance Card */}
         <section className="space-y-3 sm:space-y-4 mb-6 sm:mb-8 animate-fade-in">
-          {/* Savings Account */}
           <div className="glass-card rounded-2xl p-4 sm:p-6">
             <div className="flex items-center justify-between mb-3 sm:mb-4 gap-2">
               <div className="flex items-center gap-2 sm:gap-3 min-w-0">
@@ -80,8 +91,8 @@ const CheckBalance = () => {
                   <Wallet className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-xs sm:text-sm text-muted-foreground">Savings Account</p>
-                  <p className="text-[10px] sm:text-xs text-muted-foreground">{accountData.savings.accountNo}</p>
+                  <p className="text-xs sm:text-sm text-muted-foreground">Main Account</p>
+                  <p className="text-[10px] sm:text-xs text-muted-foreground">{maskedAccountNo}</p>
                 </div>
               </div>
               <div className="flex items-center gap-1 sm:gap-2 shrink-0">
@@ -100,26 +111,7 @@ const CheckBalance = () => {
               </div>
             </div>
             <div className="text-2xl sm:text-display text-foreground font-bold">
-              {showBalance ? `₹${accountData.savings.balance.toLocaleString('en-IN')}` : "₹ ••••••"}
-            </div>
-            <p className="text-xs sm:text-sm text-muted-foreground mt-1.5 sm:mt-2">Available Balance</p>
-          </div>
-
-          {/* Current Account */}
-          <div className="glass-card rounded-2xl p-4 sm:p-6">
-            <div className="flex items-center justify-between mb-3 sm:mb-4">
-              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-secondary/10 flex items-center justify-center shrink-0">
-                  <Wallet className="w-5 h-5 sm:w-6 sm:h-6 text-secondary" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs sm:text-sm text-muted-foreground">Current Account</p>
-                  <p className="text-[10px] sm:text-xs text-muted-foreground">{accountData.current.accountNo}</p>
-                </div>
-              </div>
-            </div>
-            <div className="text-2xl sm:text-display text-foreground font-bold">
-              {showBalance ? `₹${accountData.current.balance.toLocaleString('en-IN')}` : "₹ ••••••"}
+              {showBalance ? `₹${formattedBalance}` : "₹ ••••••"}
             </div>
             <p className="text-xs sm:text-sm text-muted-foreground mt-1.5 sm:mt-2">Available Balance</p>
           </div>

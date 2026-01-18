@@ -11,11 +11,13 @@ import { LanguageSelector } from "@/components/LanguageSelector";
 import { StatusBar } from "@/components/StatusBar";
 import { ConversationBubble } from "@/components/ConversationBubble";
 import { VoicePinSetup } from "@/components/VoicePinSetup";
+import { VoiceEnrollment } from "@/components/VoiceEnrollment";
 import { useAuth } from "@/hooks/useAuth";
 import { useTextToSpeech } from "@/hooks/useTextToSpeech";
 import { useSpeechToText } from "@/hooks/useSpeechToText";
 import { useBanking } from "@/hooks/useBanking";
 import { useVoicePin } from "@/hooks/useVoicePin";
+import { useEagleSpeaker } from "@/hooks/useEagleSpeaker";
 import { formatDistanceToNow } from "date-fns";
 
 const Index = () => {
@@ -32,12 +34,15 @@ const Index = () => {
   } = useSpeechToText();
   const { balance, transactions, isLoading: bankingLoading } = useBanking();
   const { hasPinSet, checkPinStatus } = useVoicePin();
+  const { hasVoiceProfile, checkVoiceProfile } = useEagleSpeaker();
   
   const [selectedLanguage, setSelectedLanguage] = useState("hi");
   const [isOnline] = useState(true);
   const [isVoiceVerified] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [showPinSetup, setShowPinSetup] = useState(false);
+  const [showVoiceEnrollment, setShowVoiceEnrollment] = useState(false);
+  const [authMethod, setAuthMethod] = useState<"voice" | "pin" | null>(null);
   const lastProcessedTranscript = useRef<string>("");
   
   const [conversation, setConversation] = useState([
@@ -51,21 +56,32 @@ const Index = () => {
     }
   }, [user, loading, navigate]);
 
-  // Check PIN status and prompt setup after login
+  // Check auth status and prompt setup after login
   useEffect(() => {
-    const checkAndPromptPin = async () => {
+    const checkAndPromptAuth = async () => {
       if (user && !loading && !bankingLoading) {
-        const hasPin = await checkPinStatus();
-        if (hasPin === false) {
-          // Small delay to let the page load first
-          setTimeout(() => {
-            setShowPinSetup(true);
-          }, 1000);
+        // Check for voice profile first (Picovoice Eagle)
+        const hasVoice = await checkVoiceProfile();
+        if (hasVoice) {
+          setAuthMethod("voice");
+          return;
         }
+        
+        // Check for PIN as fallback
+        const hasPin = await checkPinStatus();
+        if (hasPin) {
+          setAuthMethod("pin");
+          return;
+        }
+        
+        // Neither set - prompt for voice enrollment (preferred for rural/offline)
+        setTimeout(() => {
+          setShowVoiceEnrollment(true);
+        }, 1000);
       }
     };
-    checkAndPromptPin();
-  }, [user, loading, bankingLoading, checkPinStatus]);
+    checkAndPromptAuth();
+  }, [user, loading, bankingLoading, checkPinStatus, checkVoiceProfile]);
 
   // Process the transcript when user stops speaking
   const processCommand = useCallback(async (userMessage: string) => {
@@ -80,8 +96,8 @@ const Index = () => {
     ]);
 
     try {
-      // Use AI to process the command
-      const result = await processVoiceCommand(userMessage, selectedLanguage);
+      // Use AI to process the command - pass actual balance
+      const result = await processVoiceCommand(userMessage, selectedLanguage, balance);
 
       console.log("Voice command result:", result);
 
@@ -133,13 +149,18 @@ const Index = () => {
       stopSpeaking();
       return;
     }
-    
+
     // Toggle listening
     if (isListening) {
       stopListening();
     } else {
       // Stop any previous speech before starting to listen
       stopSpeaking();
+
+      // Allow repeating the same command again (e.g. "मेरा बैलेंस बताओ")
+      // by resetting the last processed transcript when a new listening session starts.
+      lastProcessedTranscript.current = "";
+
       await startListening();
     }
   };
@@ -171,11 +192,28 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Voice PIN Setup Modal - shown after first login */}
+      {/* Voice Enrollment Modal - preferred for rural/offline */}
+      {showVoiceEnrollment && (
+        <VoiceEnrollment 
+          onComplete={() => {
+            setShowVoiceEnrollment(false);
+            setAuthMethod("voice");
+            speak("आपकी आवाज़ रजिस्टर हो गई! अब आप आवाज़ से लेनदेन कर सकते हैं।");
+          }} 
+          onCancel={() => setShowVoiceEnrollment(false)}
+          onFallbackToPin={() => {
+            setShowVoiceEnrollment(false);
+            setShowPinSetup(true);
+          }}
+        />
+      )}
+      
+      {/* Voice PIN Setup Modal - fallback option */}
       {showPinSetup && (
         <VoicePinSetup 
           onComplete={() => {
             setShowPinSetup(false);
+            setAuthMethod("pin");
             speak("आपका सुरक्षा PIN सेट हो गया! अब आप सुरक्षित लेनदेन कर सकते हैं।");
           }} 
           onCancel={() => setShowPinSetup(false)} 
@@ -190,7 +228,7 @@ const Index = () => {
                 <Wallet className="w-5 h-5 sm:w-6 sm:h-6 text-primary-foreground" />
               </div>
               <div className="min-w-0">
-                <h1 className="font-semibold text-base sm:text-lg text-foreground truncate">GramVaani</h1>
+                <h1 className="font-semibold text-base sm:text-lg text-foreground truncate">VoiceBank</h1>
                 <p className="text-[11px] sm:text-xs text-muted-foreground truncate">Rural Banking Assistant</p>
               </div>
             </div>

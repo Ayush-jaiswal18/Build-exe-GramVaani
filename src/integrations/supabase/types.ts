@@ -50,6 +50,10 @@ export type Database = {
           preferred_language: string | null
           updated_at: string
           user_id: string
+          voice_pin_hash: string | null
+          voice_pin_set_at: string | null
+          voice_profile_data: string | null
+          voice_profile_enrolled_at: string | null
           voice_verified: boolean | null
         }
         Insert: {
@@ -60,6 +64,10 @@ export type Database = {
           preferred_language?: string | null
           updated_at?: string
           user_id: string
+          voice_pin_hash?: string | null
+          voice_pin_set_at?: string | null
+          voice_profile_data?: string | null
+          voice_profile_enrolled_at?: string | null
           voice_verified?: boolean | null
         }
         Update: {
@@ -70,6 +78,10 @@ export type Database = {
           preferred_language?: string | null
           updated_at?: string
           user_id?: string
+          voice_pin_hash?: string | null
+          voice_pin_set_at?: string | null
+          voice_profile_data?: string | null
+          voice_profile_enrolled_at?: string | null
           voice_verified?: boolean | null
         }
         Relationships: []

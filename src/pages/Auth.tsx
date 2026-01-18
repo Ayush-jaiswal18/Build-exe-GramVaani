@@ -105,7 +105,7 @@ const Auth = () => {
         } else {
           toast({
             title: "Account Created! / खाता बनाया!",
-            description: "Welcome to GramVaani. You are now signed in.",
+            description: "Welcome to VoiceBank. You are now signed in.",
           });
         }
       }
