@@ -190,7 +190,7 @@ const Index = () => {
                 <Wallet className="w-5 h-5 sm:w-6 sm:h-6 text-primary-foreground" />
               </div>
               <div className="min-w-0">
-                <h1 className="font-semibold text-base sm:text-lg text-foreground truncate">VoiceBank</h1>
+                <h1 className="font-semibold text-base sm:text-lg text-foreground truncate">GramVaani</h1>
                 <p className="text-[11px] sm:text-xs text-muted-foreground truncate">Rural Banking Assistant</p>
               </div>
             </div>
